@@ -1,113 +1,98 @@
-# Exemplo de nó de borda atualizado para uma rede P2P
-
+import sqlite3
+import json
 import socket
 import threading
+import time
 
-HOST = 'localhost'
-PORT = 12345  # Porta para comunicação com os nós regulares
+nodes = {}
+# Criação de um lock global
+lock = threading.Lock()
+# CONN = sqlite3.connect('file::memory:?cache=shared', uri=True)
 
-# Dicionário para armazenar informações sobre os nós regulares
-nodes = {}  # Chave: endereço do nó, Valor: lista de arquivos que o nó possui
+# def get_files_db(conn):
+#     conn = sqlite3.connect('file::memory:?cache=shared', uri=True)
+#     cur = conn.cursor()
+#     cur.execute("SELECT * FROM tbfiles")
+#     #consulta arquivos e ja pega o ip balanceado
+#     #CUR.execute("SELECT * FROM tbfiles where filename like 'file%' and downloads = (SELECT min(downloads) FROM tbfiles where filename like 'file%') ")
+#     rows = cur.fetchall()
 
-# Função para lidar com a conexão de um nó regular (cliente P2P)
-def handle_node_connection(conn, addr):
-    print(f"Conexão estabelecida com nó regular {addr}")
+#     # Exibir os dados
+#     print("Dados na tabela 'tbfiles':")
+#     for row in rows:
+#         print(row)
 
-    try:
+#     # Fechar a conexão
+#     CONN.close()
+
+# def create_memory_db():
+#     cur = CONN.cursor()
+#     cur.execute('''CREATE TABLE tbfiles
+#                (id INTEGER PRIMARY KEY, ip TEXT, filename TEXT, checksum TEXT, downloads INTEGER)''')
+#     CONN.commit()
+
+# def execute_queries_db(conn, sql):
+#     cur = conn.cursor()
+#     cur.execute(sql)
+#     cur.commit()
+#     get_files_db()
+
+def get_files(client_socket, ip, handshake = False):
+    print(ip)
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect((ip, 9998))
+    
+    data = client.recv(4096).decode()
+    data_json = eval(data)
+    if handshake == True:
+        client_socket.send(('ack').encode())
+    print(data_json)
+    # sql = ''
+    with lock:
+        for d in data_json:
+            nodes[ip] = nodes.get(ip, [])  # Inicializa a lista para o IP se ainda não existir
+            nodes[ip].append(d)
+    # print(sql)
+    # with db_lock:
+    #     execute_queries_db(conn, sql)
+
+def handle_client(client_socket, ip):
+    while True:
+        try:
+            # Recebe a mensagem do cliente
+            request = client_socket.recv(1024).decode('utf-8')
+
+            if request == 'handshake':
+                threading.Thread(target=get_files, args=(client_socket, ip, True)).start()
+                
+        except ConnectionResetError:
+            break
+
+    client_socket.close()
+    print("Conexão fechada com o cliente.")
+
+def main():
+    # create_memory_db()
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("0.0.0.0", 9999))
+    server.listen(5)
+    print("Servidor ouvindo na porta 9999...")
+
+    while True:
+        client_socket, addr = server.accept()
+        print(f"Conexão aceita de: {addr}")
+
+        client_handler = threading.Thread(target=handle_client, args=(client_socket, addr[0]))
+        client_handler.start()
         while True:
-            # Recebe o nome do arquivo do nó regular
-            filename = conn.recv(1024).decode()
-            if not filename:
-                break
-
-            print(f"Recebido pedido de arquivo '{filename}' de {addr}")
-
-            # Verifica se o arquivo está disponível em algum nó regular
-            file_found = False
-            for node_addr, files in nodes.items():
-                if filename in files:
-                    file_found = True
-                    print(f"Enviando arquivo '{filename}' para {addr} de {node_addr}")
-
-                    # Abre o arquivo para leitura binária
-                    with open(filename, 'rb') as f:
-                        while True:
-                            data = f.read(4096)
-                            if not data:
-                                break
-                            conn.sendall(data)
-
-                    print(f"Arquivo '{filename}' enviado para {addr}")
+            with lock:
+                print("Conteúdo atual de nodes:")
+                for ip, files in nodes.items():
+                    print(f"IP: {ip}, Arquivos: {files}")
+                if nodes:  # Se nodes não estiver vazio, pare o loop
                     break
-
-            if not file_found:
-                print(f"Arquivo '{filename}' não encontrado em nenhum nó regular.")
-                conn.sendall("Arquivo não encontrado")
-
-            # Envia o arquivo para todos os outros nós regulares na rede
-            send_file_to_all_nodes(filename)
-
-    except Exception as e:
-        print(f"Erro ao lidar com conexão de {addr}: {e}")
-
-    finally:
-        conn.close()
-        print(f"Conexão fechada com {addr}")
-
-# Função para atualizar a lista de arquivos de um nó regular
-def update_node_files(addr, files):
-    nodes[addr] = files
-    print(f"Atualizada lista de arquivos para o nó {addr}: {files}")
-
-# Função para enviar um arquivo para um nó regular específico
-def send_file_to_node(conn, filename):
-    try:
-        # Envia o nome do arquivo primeiro
-        conn.send(filename.encode())
-
-        # Abre o arquivo para leitura binária
-        with open(filename, 'rb') as f:
-            while True:
-                data = f.read(4096)
-                if not data:
-                    break
-                conn.sendall(data)
-
-        print(f"Arquivo '{filename}' enviado para um nó regular.")
-
-    except Exception as e:
-        print(f"Erro ao enviar arquivo '{filename}' para um nó regular: {e}")
-
-# Função para enviar um arquivo para todos os nós regulares na rede
-def send_file_to_all_nodes(filename):
-    for node_conn, node_addr in nodes.items():
-        send_file_to_node(node_conn, filename)
-
-# Função para iniciar o servidor de borda
-def start_edge_server():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind((HOST, PORT))
-        s.listen(5)
-        print(f"Nó de borda iniciado. Escutando na porta {PORT}...")
-
-        while True:
-            conn, addr = s.accept()
-            thread = threading.Thread(target=handle_node_connection, args=(conn, addr))
-            thread.start()
-
-            # Recebe a lista de arquivos do nó regular
-            files_data = conn.recv(1024).decode()
-            files = files_data.split(',')
-            update_node_files(addr, files)
-
-    except Exception as e:
-        print(f"Erro ao iniciar o servidor de borda: {e}")
-
-    finally:
-        s.close()
-
-# Inicia o servidor de borda em uma thread separada
+            
+            # Aguarda um segundo antes de verificar novamente
+            time.sleep(10)
 if __name__ == "__main__":
-    edge_server_thread = threading.Thread(target=start_edge_server)
-    edge_server_thread.start()
+    main()

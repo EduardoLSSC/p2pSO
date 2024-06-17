@@ -1,53 +1,107 @@
-# Exemplo simplificado de um nó regular (cliente P2P)
-
-import socket
-import os
 import hashlib
+import socket
 import threading
+import os
+import time
 
-HOST = 'localhost'
-PORT = 12345  # Porta do servidor de borda
+CURRENT_FOLDER = os.getcwd()
+PATH = f'{CURRENT_FOLDER}/shared'
+BORDER_NODE_IP = "192.168.0.154"
 
-# Função para calcular o checksum MD5 de um arquivo
-def calculate_checksum(filename):
+def calculate_checksum(file):
     hasher = hashlib.md5()
-    with open(filename, 'rb') as f:
+    with open(file, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
 
-# Função para lidar com o envio de um arquivo para o servidor de borda
-def send_file_to_edge_server(filename):
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((HOST, PORT))
+def receive_messages(sock):
+    while True:
+        try:
+            # Recebe mensagens do servidor
+            response = sock.recv(1024).decode('utf-8')
+            print(f"[SERVER]: {response}")
+        except ConnectionResetError:
+            print("Servidor fechou a conexão.")
+            break
 
-        # Envia o nome do arquivo primeiro
-        s.send(filename.encode())
+def list_files_in_folder():
+    files_info = []
+    if not os.path.exists(PATH):
+        try:
+            os.makedirs(PATH)  # Tenta criar o diretório se não existir
+            print(f"Pasta '{PATH}' criada com sucesso.")
+        except OSError as e:
+            print(f"Erro ao criar pasta '{PATH}': {e}")
+            return []
 
-        # Abre o arquivo para leitura binária
-        with open(filename, 'rb') as f:
-            while True:
-                data = f.read(4096)
-                if not data:
-                    break
-                s.sendall(data)
+    for root, _, filenames in os.walk(PATH):
+        for filename in filenames:
+            file_path = os.path.join(root, filename)
+            size = os.path.getsize(file_path)
+            checksum = calculate_checksum(file_path)
+            files_info.append({
+                'filename': filename,
+                'checksum': checksum,
+                'size': size
+            })
 
-        print(f"Arquivo '{filename}' enviado com sucesso para o servidor de borda.")
+    return files_info
 
-    except Exception as e:
-        print(f"Erro ao enviar arquivo '{filename}' para o servidor de borda: {e}")
+def handle_border_node(client_socket, ip):
+    while True:
+        try:
+            client_socket.send(str(list_files_in_folder()).encode())
+            # client_socket.send(('Hello').encode())
+            client_socket.close()
+            break
+        except ConnectionResetError:
+            break
 
-    finally:
-        s.close()
+def node_server():
+    #Esse server e somente para se comunicar com os outros nos
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("0.0.0.0", 9998))
+    listener.listen(1)
+    print('Aberto a conexoes...')
+    while True:
+        client_socket, addr = listener.accept()
+        print(f"Conexão aceita de: {addr[0]}")
+        if addr[0] == BORDER_NODE_IP:
+            client_handler = threading.Thread(target=handle_border_node, args=(client_socket, addr[0]))
+            client_handler.start()
 
-# Exemplo de uso
+
+def main():
+    threading.Thread(target=node_server, args=()).start()
+    time.sleep(3)
+    #Conectando ao no de borda
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect((BORDER_NODE_IP, 9999))
+    
+    client.send(('handshake').encode())
+    start_time = time.time()
+    while True:
+        if client.recv(1024).decode() == 'ack':
+            break
+        elif time.time() - start_time > 15:
+            print('Timeout! Encerrando conexao')
+            client.close()
+            exit(1)
+
+    print("Conectado ao servidor.")
+
+    # Thread para receber mensagens do servidor
+    recv_thread = threading.Thread(target=receive_messages, args=(client,))
+    recv_thread.start()
+    listFiles = list_files_in_folder()
+    print(listFiles)
+    while True:
+
+        message = input()
+        client.send((message).encode('utf-8'))
+        # client.close()
+        # print("Conexão fechada com o servidor.")
+
 if __name__ == "__main__":
-    filenames = ['arquivo1.txt', 'video.mp4', 'imagem.jpg']  # Exemplo de lista de arquivos
-    for filename in filenames:
-        checksum = calculate_checksum(filename)
-        print(f"Checksum do arquivo '{filename}': {checksum}")
-
-        # Envia o arquivo para o servidor de borda em uma thread separada
-        thread = threading.Thread(target=send_file_to_edge_server, args=(filename,))
-        thread.start()
+    main()
