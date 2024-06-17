@@ -7,6 +7,8 @@ import time
 CURRENT_FOLDER = os.getcwd()
 PATH = f'{CURRENT_FOLDER}/shared'
 BORDER_NODE_IP = "192.168.0.154"
+HANDSHAKE_PASSED=False
+lock = threading.Lock()
 
 def calculate_checksum(file):
     hasher = hashlib.md5()
@@ -45,10 +47,11 @@ def list_files_in_folder():
                 'checksum': checksum,
                 'size': size
             })
-
+    print(files_info)
     return files_info
 
 def handle_border_node(client_socket):
+    print('entrou border')
     while True:
         try:
             client_socket.send(str(list_files_in_folder()).encode())
@@ -60,13 +63,15 @@ def handle_border_node(client_socket):
 
 def handle_regular_node(client_socket):
     filename = client_socket.recv(1024).decode()
-    arquivo = open( filename )
+    arquivo = open( f"shared/{filename}", 'rb' )
 
     print("Realizando a transferencia.")
 
-    for i in arquivo.readlines():
-        # print i
-        client_socket.send(i)
+    while True:
+        chunk = arquivo.read(4096)
+        if not chunk:
+            break
+        client_socket.send(chunk)
 
     print("Arquivo enviado com sucesso!")
 
@@ -75,10 +80,11 @@ def handle_regular_node(client_socket):
 
 
 def node_server():
+    global HANDSHAKE_PASSED
     #Esse server e somente para se comunicar com os outros nos
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("0.0.0.0", 9998))
-    listener.listen(1)
+    listener.listen(4)
     print('Aberto a conexoes...')
     while True:
         client_socket, addr = listener.accept()
@@ -87,10 +93,11 @@ def node_server():
             client_handler = threading.Thread(target=handle_border_node, args=(client_socket,))
             client_handler.start()
         else:
-            threading.Thread(target=handle_regular_node, args=(client_socket,))
+            threading.Thread(target=handle_regular_node, args=(client_socket,)).start()
 
 
 def main():
+    global HANDSHAKE_PASSED
     threading.Thread(target=node_server, args=()).start()
     time.sleep(3)
     #Conectando ao no de borda
@@ -101,6 +108,10 @@ def main():
     start_time = time.time()
     while True:
         if client.recv(1024).decode() == 'ack':
+            with lock:
+                print(HANDSHAKE_PASSED)
+                HANDSHAKE_PASSED = True
+                print(HANDSHAKE_PASSED)
             break
         elif time.time() - start_time > 15:
             print('Timeout! Encerrando conexao')
@@ -114,14 +125,15 @@ def main():
             filename = str(input('Qual arquivo deseja buscar? '))
             client.send(str(['getfiles', filename]).encode())
             ip = client.recv(1024).decode()
-            threading.Thread(target=get_file_from_regular_node, args=(ip, filename))
+            threading.Thread(target=get_file_from_regular_node, args=(ip, filename)).start()
             print('ip: '+ip)
 
 def get_file_from_regular_node(ip, filename):
-    print('Abrindo conexao com ')
+    print(f'Abrindo conexao com: {ip}; filename: {filename}')
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((ip, 9998))
-    arquivo = open(filename,'wb')
+    client.send(filename.encode())
+    arquivo = open(f"shared/{filename}",'wb')
 
     # Le os dados
     while True:
@@ -136,7 +148,7 @@ def get_file_from_regular_node(ip, filename):
         # Escreve os dados do arquivo
         arquivo.write(dados)
 
-        arquivo.close()
+    arquivo.close()
     client.close()
 
 if __name__ == "__main__":

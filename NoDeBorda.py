@@ -5,11 +5,35 @@ import time
 nodes = {}
 lock = threading.Lock()
 
+def att_node_list():
+    while True:
+        if len(nodes) == 0:
+            print('Sem nos conectados...')
+        else:
+            for files in nodes.items():
+                try:
+
+                    print('Tentando acessar lista de arquivos dos nos regulares atualizadas...')
+                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    client.connect((files[0], 9998))
+                    new_list = client.recv(4096).decode()
+                    nodes[files[0]] = eval(new_list)
+                    print(nodes[files[0]])
+                    client.close()
+                except:
+                    print('Conexao do no regular encerrada! Removendo arquvos disponiveis...')
+                    nodes.pop(files[0])
+                    if len(nodes) == 0:
+                        break
+
+        time.sleep(20)
+
 def search_file_in_nodes(client_socket, search_file):
     print('fasf'+search_file)
     node_ip = ''
     for ip, file_list in nodes.items():
         for file_info in file_list:
+            print(file_info['filename'])
             if file_info['filename'] == search_file:
                 node_ip = str(ip)
                 client_socket.send(node_ip.encode())
@@ -29,10 +53,11 @@ def get_files(client_socket, ip, handshake = False):
         data = client.recv(4096).decode()
         data_json = eval(data)
         with lock:
+            nodes[ip] = nodes.get(ip, [])
+            nodes[ip].clear()
             for d in data_json:
-                nodes[ip] = nodes.get(ip, [])
                 nodes[ip].append(d)
-                print(nodes)
+            print(nodes)
         client_socket.send(('ack').encode())
     else:
         data = client.recv(4096).decode()
@@ -61,10 +86,16 @@ def handle_client(client_socket, ip):
             break
 
     client_socket.close()
+    #Todo logica para remover arquivos do ip
+    for files in nodes.items():
+        nodes.pop(ip)
+        if len(nodes) == 0:
+            break
+    print('Lista atualizada '+str(nodes))
     print("Conexão fechada com o cliente.")
 
 def main():
-    # create_memory_db()
+    threading.Thread(target=att_node_list, args=()).start()
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(("0.0.0.0", 9999))
     server.listen(5)
