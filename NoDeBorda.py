@@ -1,70 +1,62 @@
-import sqlite3
-import json
 import socket
 import threading
 import time
 
 nodes = {}
-# Criação de um lock global
 lock = threading.Lock()
-# CONN = sqlite3.connect('file::memory:?cache=shared', uri=True)
 
-# def get_files_db(conn):
-#     conn = sqlite3.connect('file::memory:?cache=shared', uri=True)
-#     cur = conn.cursor()
-#     cur.execute("SELECT * FROM tbfiles")
-#     #consulta arquivos e ja pega o ip balanceado
-#     #CUR.execute("SELECT * FROM tbfiles where filename like 'file%' and downloads = (SELECT min(downloads) FROM tbfiles where filename like 'file%') ")
-#     rows = cur.fetchall()
+def search_file_in_nodes(client_socket, search_file):
+    print('fasf'+search_file)
+    node_ip = ''
+    for ip, file_list in nodes.items():
+        for file_info in file_list:
+            if file_info['filename'] == search_file:
+                node_ip = str(ip)
+                client_socket.send(node_ip.encode())
+    if node_ip == '':
+        client_socket.send(('Nenhum no conectado possui o arquivo digitado').encode())
 
-#     # Exibir os dados
-#     print("Dados na tabela 'tbfiles':")
-#     for row in rows:
-#         print(row)
-
-#     # Fechar a conexão
-#     CONN.close()
-
-# def create_memory_db():
-#     cur = CONN.cursor()
-#     cur.execute('''CREATE TABLE tbfiles
-#                (id INTEGER PRIMARY KEY, ip TEXT, filename TEXT, checksum TEXT, downloads INTEGER)''')
-#     CONN.commit()
-
-# def execute_queries_db(conn, sql):
-#     cur = conn.cursor()
-#     cur.execute(sql)
-#     cur.commit()
-#     get_files_db()
+def get_files_by_name(client_socket, search_file):
+    print('Starting getfiles protocol')
+    print('filename: '+search_file)
+    search_file_in_nodes(client_socket, search_file)
 
 def get_files(client_socket, ip, handshake = False):
-    print(ip)
+    print('Starting handshake protocol')
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((ip, 9998))
-    
-    data = client.recv(4096).decode()
-    data_json = eval(data)
     if handshake == True:
+        data = client.recv(4096).decode()
+        data_json = eval(data)
+        with lock:
+            for d in data_json:
+                nodes[ip] = nodes.get(ip, [])
+                nodes[ip].append(d)
+                print(nodes)
         client_socket.send(('ack').encode())
-    print(data_json)
-    # sql = ''
-    with lock:
-        for d in data_json:
-            nodes[ip] = nodes.get(ip, [])  # Inicializa a lista para o IP se ainda não existir
-            nodes[ip].append(d)
-    # print(sql)
-    # with db_lock:
-    #     execute_queries_db(conn, sql)
+    else:
+        data = client.recv(4096).decode()
+        data_json = eval(data)
+        with lock:
+            for d in data_json:
+                nodes[ip] = nodes.get(ip, [])
+                nodes[ip].append(d)
+                print(nodes)
+    client.close()
 
 def handle_client(client_socket, ip):
     while True:
         try:
             # Recebe a mensagem do cliente
             request = client_socket.recv(1024).decode('utf-8')
-
+            print(request)
             if request == 'handshake':
                 threading.Thread(target=get_files, args=(client_socket, ip, True)).start()
-                
+            else:
+                protocol = eval(request)[0]
+                filename = eval(request)[1]
+            
+                threading.Thread(target=get_files_by_name, args=(client_socket, filename)).start()
         except ConnectionResetError:
             break
 
@@ -84,15 +76,5 @@ def main():
 
         client_handler = threading.Thread(target=handle_client, args=(client_socket, addr[0]))
         client_handler.start()
-        while True:
-            with lock:
-                print("Conteúdo atual de nodes:")
-                for ip, files in nodes.items():
-                    print(f"IP: {ip}, Arquivos: {files}")
-                if nodes:  # Se nodes não estiver vazio, pare o loop
-                    break
-            
-            # Aguarda um segundo antes de verificar novamente
-            time.sleep(10)
 if __name__ == "__main__":
     main()

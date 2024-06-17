@@ -48,7 +48,7 @@ def list_files_in_folder():
 
     return files_info
 
-def handle_border_node(client_socket, ip):
+def handle_border_node(client_socket):
     while True:
         try:
             client_socket.send(str(list_files_in_folder()).encode())
@@ -57,6 +57,22 @@ def handle_border_node(client_socket, ip):
             break
         except ConnectionResetError:
             break
+
+def handle_regular_node(client_socket):
+    filename = client_socket.recv(1024).decode()
+    arquivo = open( filename )
+
+    print("Realizando a transferencia.")
+
+    for i in arquivo.readlines():
+        # print i
+        client_socket.send(i)
+
+    print("Arquivo enviado com sucesso!")
+
+    # Fecha o arquivo
+    arquivo.close()
+
 
 def node_server():
     #Esse server e somente para se comunicar com os outros nos
@@ -68,8 +84,10 @@ def node_server():
         client_socket, addr = listener.accept()
         print(f"Conexão aceita de: {addr[0]}")
         if addr[0] == BORDER_NODE_IP:
-            client_handler = threading.Thread(target=handle_border_node, args=(client_socket, addr[0]))
+            client_handler = threading.Thread(target=handle_border_node, args=(client_socket,))
             client_handler.start()
+        else:
+            threading.Thread(target=handle_regular_node, args=(client_socket,))
 
 
 def main():
@@ -88,20 +106,38 @@ def main():
             print('Timeout! Encerrando conexao')
             client.close()
             exit(1)
+    
+    while True:
+        print('1- Buscar arquivo\n2- Fechar conexao com no de borda')    
+        opt = int(input())
+        if opt == 1:
+            filename = str(input('Qual arquivo deseja buscar? '))
+            client.send(str(['getfiles', filename]).encode())
+            ip = client.recv(1024).decode()
+            threading.Thread(target=get_file_from_regular_node, args=(ip, filename))
+            print('ip: '+ip)
 
-    print("Conectado ao servidor.")
+def get_file_from_regular_node(ip, filename):
+    print('Abrindo conexao com ')
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect((ip, 9998))
+    arquivo = open(filename,'wb')
 
-    # Thread para receber mensagens do servidor
-    recv_thread = threading.Thread(target=receive_messages, args=(client,))
-    recv_thread.start()
-    listFiles = list_files_in_folder()
-    print(listFiles)
+    # Le os dados
     while True:
 
-        message = input()
-        client.send((message).encode('utf-8'))
-        # client.close()
-        # print("Conexão fechada com o servidor.")
+        # Recebe os dados do arquivo
+        dados = client.recv(4096)
+
+        # Verifica se acabou a transferencia
+        if not dados:
+            break
+
+        # Escreve os dados do arquivo
+        arquivo.write(dados)
+
+        arquivo.close()
+    client.close()
 
 if __name__ == "__main__":
     main()
