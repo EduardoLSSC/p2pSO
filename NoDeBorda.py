@@ -18,7 +18,6 @@ def att_node_list():
                     client.connect((files[0], 9998))
                     new_list = client.recv(4096).decode()
                     nodes[files[0]] = eval(new_list)
-                    print(nodes[files[0]])
                     client.close()
                 except:
                     print('Conexao do no regular encerrada! Removendo arquvos disponiveis...')
@@ -29,11 +28,9 @@ def att_node_list():
         time.sleep(20)
 
 def search_file_in_nodes(client_socket, search_file):
-    print('fasf'+search_file)
     node_ip = ''
     for ip, file_list in nodes.items():
         for file_info in file_list:
-            print(file_info['filename'])
             if file_info['filename'] == search_file:
                 node_ip = str(ip)
                 client_socket.send(node_ip.encode())
@@ -74,7 +71,6 @@ def handle_client(client_socket, ip):
         try:
             # Recebe a mensagem do cliente
             request = client_socket.recv(1024).decode('utf-8')
-            print(request)
             if request == 'handshake':
                 threading.Thread(target=get_files, args=(client_socket, ip, True)).start()
             else:

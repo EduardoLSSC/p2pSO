@@ -17,16 +17,6 @@ def calculate_checksum(file):
             hasher.update(chunk)
     return hasher.hexdigest()
 
-def receive_messages(sock):
-    while True:
-        try:
-            # Recebe mensagens do servidor
-            response = sock.recv(1024).decode('utf-8')
-            print(f"[SERVER]: {response}")
-        except ConnectionResetError:
-            print("Servidor fechou a conexão.")
-            break
-
 def list_files_in_folder():
     files_info = []
     if not os.path.exists(PATH):
@@ -47,11 +37,9 @@ def list_files_in_folder():
                 'checksum': checksum,
                 'size': size
             })
-    print(files_info)
     return files_info
 
 def handle_border_node(client_socket):
-    print('entrou border')
     while True:
         try:
             client_socket.send(str(list_files_in_folder()).encode())
@@ -110,9 +98,7 @@ def main():
     while True:
         if client.recv(1024).decode() == 'ack':
             with lock:
-                print(HANDSHAKE_PASSED)
                 HANDSHAKE_PASSED = True
-                print(HANDSHAKE_PASSED)
             break
         elif time.time() - start_time > 15:
             print('Timeout! Encerrando conexao')
@@ -128,6 +114,9 @@ def main():
             ip = client.recv(1024).decode()
             threading.Thread(target=get_file_from_regular_node, args=(ip, filename)).start()
             print('ip: '+ip)
+        else:
+            print('Encerrando conexao')
+            exit(1)
 
 def get_file_from_regular_node(ip, filename):
     print(f'Abrindo conexao com: {ip}; filename: {filename}')
