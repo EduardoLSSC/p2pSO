@@ -50,22 +50,48 @@ def handle_border_node(client_socket):
             break
 
 def handle_regular_node(client_socket):
-    print('bateu aq')
     filename = client_socket.recv(1024).decode()
-    arquivo = open( f"shared/{filename}", 'rb' )
-    checksum = calculate_checksum(filename)
-    client_socket.send(str(checksum).encode())
-    print("Realizando a transferencia.")
+    file_path = os.path.join(PATH, filename)
 
-    while True:
-        chunk = arquivo.read(4096)
-        if not chunk:
-            break
-        client_socket.send(chunk)
-    print("Arquivo enviado com sucesso!")
+    try:
+        with open(file_path, 'rb') as arquivo:
+            print(f"Enviando arquivo {filename} para o cliente...")
 
-    # Fecha o arquivo
-    arquivo.close()
+            while True:
+                chunk = arquivo.read(4096)
+                if not chunk:
+                    break
+
+                # Verifica se a conexão ainda está ativa antes de enviar dados
+                if client_socket.fileno() == -1:
+                    print("Conexão fechada pelo cliente.")
+                    break
+
+                client_socket.send(chunk)
+
+            print("Arquivo enviado com sucesso!")
+
+            # Calcula o checksum do arquivo e envia para o cliente
+            checksum = calculate_checksum(filename)
+            client_socket.send(str(checksum).encode())
+
+    except FileNotFoundError:
+        print(f"Arquivo {filename} não encontrado.")
+        client_socket.send("FileNotFound".encode())
+
+    except (BrokenPipeError, ConnectionResetError):
+        print("Erro de conexão durante a transmissão.")
+        # Lida com a exceção de conexão interrompida de forma adequada
+
+    except Exception as e:
+        print(f"Erro ao enviar arquivo {filename}: {e}")
+        client_socket.send("ServerError".encode())
+
+    finally:
+        # Fecha o arquivo e o socket
+        arquivo.close()
+        client_socket.close()
+
     
 
 
