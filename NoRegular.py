@@ -53,7 +53,8 @@ def handle_regular_node(client_socket):
     print('bateu aq')
     filename = client_socket.recv(1024).decode()
     arquivo = open( f"shared/{filename}", 'rb' )
-
+    checksum = calculate_checksum(filename)
+    client_socket.send(str(checksum).encode())
     print("Realizando a transferencia.")
 
     while True:
@@ -65,8 +66,6 @@ def handle_regular_node(client_socket):
 
     # Fecha o arquivo
     arquivo.close()
-    print(str(calculate_checksum(filename)))
-    client_socket.send(str(calculate_checksum(filename)).encode())
     
 
 
@@ -126,6 +125,7 @@ def get_file_from_regular_node(ip, filename, true_checksum):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((ip, 9998))
     client.send(filename.encode())
+    checksum_recived = client.recv(1024).decode()
     arquivo = open(f"shared/{filename}",'wb')
 
     # Le os dados
@@ -141,8 +141,8 @@ def get_file_from_regular_node(ip, filename, true_checksum):
         # Escreve os dados do arquivo
         arquivo.write(dados)
     arquivo.close()
-    checksum = calculate_checksum(filename)
-    if true_checksum == checksum:
+    checksum_local = calculate_checksum(filename)
+    if checksum_local == checksum_recived:
         print('Arquivo integro')
     else:
         print('Arquivo corrompido')
