@@ -151,7 +151,6 @@ def get_file_from_regular_node(ip, filename, true_checksum):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((ip, 9998))
     client.send(filename.encode())
-    checksum_recived = client.recv(1024).decode()
     arquivo = open(f"shared/{filename}",'wb')
 
     # Le os dados
@@ -167,6 +166,8 @@ def get_file_from_regular_node(ip, filename, true_checksum):
         # Escreve os dados do arquivo
         arquivo.write(dados)
     arquivo.close()
+    checksum_recived = client.recv(1024).decode('utf-8')
+
     checksum_local = calculate_checksum(filename)
     if checksum_local == checksum_recived:
         print('Arquivo integro')
