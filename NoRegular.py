@@ -10,9 +10,9 @@ BORDER_NODE_IP = "192.168.0.154"
 HANDSHAKE_PASSED=False
 lock = threading.Lock()
 
-def calculate_checksum(file):
+def calculate_checksum(filename):
     hasher = hashlib.md5()
-    with open(file, 'rb') as f:
+    with open(f"shared/{filename}", 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
@@ -65,7 +65,7 @@ def handle_regular_node(client_socket):
     # Fecha o arquivo
     arquivo.close()
 
-    client_socket.send(str(calculate_checksum(arquivo)).encode())
+    client_socket.send(str(calculate_checksum(filename)).encode())
     
 
 
@@ -139,7 +139,7 @@ def get_file_from_regular_node(ip, filename):
         arquivo.write(dados)
     true_check_sum = client.recv(1024).decode()
     arquivo.close()
-    checksum = calculate_checksum(arquivo)
+    checksum = calculate_checksum(filename)
     if true_check_sum == checksum:
         print('Arquivo integro')
     else:
