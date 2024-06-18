@@ -50,6 +50,7 @@ def handle_border_node(client_socket):
             break
 
 def handle_regular_node(client_socket):
+    print('bateu aq')
     filename = client_socket.recv(1024).decode()
     arquivo = open( f"shared/{filename}", 'rb' )
 
@@ -64,7 +65,7 @@ def handle_regular_node(client_socket):
 
     # Fecha o arquivo
     arquivo.close()
-
+    print(str(calculate_checksum(filename)))
     client_socket.send(str(calculate_checksum(filename)).encode())
     
 
@@ -111,14 +112,16 @@ def main():
         if opt == 1:
             filename = str(input('Qual arquivo deseja buscar? '))
             client.send(str(['getfiles', filename]).encode())
-            ip = client.recv(1024).decode()
-            threading.Thread(target=get_file_from_regular_node, args=(ip, filename)).start()
+            lista_dados = eval(client.recv(1024).decode())
+            ip = lista_dados[0]
+            checksum = lista_dados[1]
+            threading.Thread(target=get_file_from_regular_node, args=(ip, filename, checksum)).start()
             print('ip: '+ip)
         else:
             print('Encerrando conexao')
             exit(1)
 
-def get_file_from_regular_node(ip, filename):
+def get_file_from_regular_node(ip, filename, true_checksum):
     print(f'Abrindo conexao com: {ip}; filename: {filename}')
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((ip, 9998))
@@ -137,10 +140,9 @@ def get_file_from_regular_node(ip, filename):
 
         # Escreve os dados do arquivo
         arquivo.write(dados)
-    true_check_sum = client.recv(1024).decode()
     arquivo.close()
     checksum = calculate_checksum(filename)
-    if true_check_sum == checksum:
+    if true_checksum == checksum:
         print('Arquivo integro')
     else:
         print('Arquivo corrompido')

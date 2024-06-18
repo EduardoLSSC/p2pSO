@@ -34,7 +34,8 @@ def search_file_in_nodes(client_socket, search_file):
         for file_info in file_list:
             if file_info['filename'] == search_file:
                 node_ip = str(ip)
-                client_socket.send(node_ip.encode())
+                info = [node_ip, file_info['checksum']]
+                client_socket.send(str(info).encode())
     if node_ip == '':
         client_socket.send(('Nenhum no conectado possui o arquivo digitado').encode())
 
