@@ -19,6 +19,7 @@ def att_node_list():
                     new_list = client.recv(4096).decode()
                     nodes[files[0]] = eval(new_list)
                     client.close()
+                    print("Sucesso!")
                 except:
                     print('Conexao do no regular encerrada! Removendo arquvos disponiveis...')
                     nodes.pop(files[0])

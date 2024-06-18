@@ -60,12 +60,13 @@ def handle_regular_node(client_socket):
         if not chunk:
             break
         client_socket.send(chunk)
-
-    client_socket.send(str(calculate_checksum(arquivo)).encode())
     print("Arquivo enviado com sucesso!")
 
     # Fecha o arquivo
     arquivo.close()
+
+    client_socket.send(str(calculate_checksum(arquivo)).encode())
+    
 
 
 def node_server():
@@ -77,7 +78,6 @@ def node_server():
     print('Aberto a conexoes...')
     while True:
         client_socket, addr = listener.accept()
-        print(f"Conexão aceita de: {addr[0]}")
         if addr[0] == BORDER_NODE_IP:
             client_handler = threading.Thread(target=handle_border_node, args=(client_socket,))
             client_handler.start()
@@ -138,12 +138,12 @@ def get_file_from_regular_node(ip, filename):
         # Escreve os dados do arquivo
         arquivo.write(dados)
     true_check_sum = client.recv(1024).decode()
+    arquivo.close()
     checksum = calculate_checksum(arquivo)
     if true_check_sum == checksum:
         print('Arquivo integro')
     else:
         print('Arquivo corrompido')
-    arquivo.close()
     client.close()
 
 if __name__ == "__main__":
