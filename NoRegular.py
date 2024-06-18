@@ -31,7 +31,7 @@ def list_files_in_folder():
         for filename in filenames:
             file_path = os.path.join(root, filename)
             size = os.path.getsize(file_path)
-            checksum = calculate_checksum(file_path)
+            checksum = calculate_checksum(filename)
             files_info.append({
                 'filename': filename,
                 'checksum': checksum,
