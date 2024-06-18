@@ -73,6 +73,7 @@ def handle_regular_node(client_socket):
             break
         client_socket.send(chunk)
 
+    client_socket.send(str(calculate_checksum(arquivo)).encode())
     print("Arquivo enviado com sucesso!")
 
     # Fecha o arquivo
@@ -147,7 +148,12 @@ def get_file_from_regular_node(ip, filename):
 
         # Escreve os dados do arquivo
         arquivo.write(dados)
-
+    true_check_sum = client.recv(1024).decode()
+    checksum = calculate_checksum(arquivo)
+    if true_check_sum == checksum:
+        print('Arquivo integro')
+    else:
+        print('Arquivo corrompido')
     arquivo.close()
     client.close()
 
